@@ -5,7 +5,7 @@ import os
 cats_path = os.path.join("PetImages", "Cat")
 dogs_path = os.path.join("PetImages", "Dog")
 
-max_photos_per_folder = 7500
+max_photos_per_folder = 10000
 image_size = (100, 100)
 all_dogs = []
 all_cats = []
