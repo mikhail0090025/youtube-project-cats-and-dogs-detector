@@ -10,11 +10,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 import matplotlib.pyplot as plt
 import os
-from torchvision.models import vgg11
+from torchvision.models import vgg11, vgg11_bn, vgg16, vgg19
 # Глобальная история accuracy
 accuracy_history = {"train_acc": [], "val_acc": []}
 
-vgg11_fm = vgg11(pretrained=True).features
+vgg11_fm = vgg19(pretrained=True).features
 for param in vgg11_fm.parameters():
     param.requires_grad = False
 
@@ -42,13 +42,15 @@ class MyDataset(Dataset):
         
         if os.path.exists(f'vgg11_feature_maps{len(self.images)}.npy'):
             self.fms = np.load(f'vgg11_feature_maps{len(self.images)}.npy')
-            self.fms = torch.from_numpy(self.fms).float()
+            self.fms = torch.from_numpy(np.array(self.fms)).float()
         else:
             self.fms = []
-            for image in self.images:
-                self.fms.append(vgg11_fm(torch.tensor(image)))
+            for i, image in enumerate(self.images):
+                self.fms.append(vgg11_fm(torch.tensor([image])))
+                if i % 100 == 0:
+                    print(f"Item {i}/{len(self.images)}")
             
-            self.fms = torch.from_numpy(self.fms).float()
+            self.fms = torch.from_numpy(np.array(self.fms)).float()
             np.save(f'vgg11_feature_maps{len(self.images)}.npy', self.fms.numpy())
         self.images = None
         print("Dataset size: ", self.__len__())
@@ -61,17 +63,32 @@ class MyDataset(Dataset):
         image = self.fms[idx]
         return image, self.outputs[idx]
 
+class CustomLinearTransform(nn.Module):
+    def __init__(self, input_shape):
+        super(CustomLinearTransform, self).__init__()
+        # Инициализируем обучаемые параметры
+        self.a = nn.Parameter(torch.tensor(1.0, requires_grad=True))  # Коэффициент a
+        self.b = nn.Parameter(torch.tensor(0.0, requires_grad=True))  # Сдвиг b
+        self.input_shape = input_shape  # Сохраняем форму входа для совместимости
+
+    def forward(self, x):
+        # x: (batch_size, seq_len, input_size) или (batch_size, channels, height, width)
+        # Применяем формулу x2 = a * x1 + b
+        return self.a * x + self.b
+
 # Detector
 class Detector(nn.Module):
     def __init__(self):
         super(Detector, self).__init__()
 
         self.flatten = nn.Flatten()
+        self.mylayer = CustomLinearTransform(3*3*512)
         self.last_layer = nn.Linear(3*3*512, 2)
         self.softmax = nn.Softmax()
 
     def forward(self, x):
         x = self.flatten(x)
+        x = self.mylayer(x)
         x = self.last_layer(x)
         x = self.softmax(x)
         return x

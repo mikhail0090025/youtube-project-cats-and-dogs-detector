@@ -1,3 +1,4 @@
 PetImages
 *.npz
 __pycache__
+*.npy

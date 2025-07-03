@@ -1,0 +1,15 @@
+Beyond terms
+The idea behind tf–idf also applies to entities other than terms. In 1998, the concept of idf was applied to citations. The authors argued that "if a very
+uncommon citation is shared by two documents, this should be weighted more highly than a citation made by a large number of documents". In addition, tf–idf was
+applied to "visual words" with the purpose of conducting object matching in videos,[11] and entire sentences.[12] However, the concept of tf–idf did not prove to
+be more effective in all cases than a plain tf scheme (without idf). When tf–idf was applied to citations, researchers could find no improvement over a simple
+citation-count weight that had no idf component.
+Derivatives
+A number of term-weighting schemes have derived from tf–idf. One of them is TF–PDF (term frequency * proportional document frequency). TF–PDF was introduced in
+2001 in the context of identifying emerging topics in the media. The PDF component measures the difference of how often a term occurs in different domains.
+Another derivate is TF–IDuF. In TF–IDuF, idf is not calculated based on the document corpus that is to be searched or recommended. Instead, idf is calculated
+on users' personal document collections. The authors report that TF–IDuF was equally effective as tf–idf but could also be applied in situations when, e.g., a
+user modeling system has no access to a global document corpus. The DELTA TF-IDF derivative uses the difference in importance of a term across two specific
+classes, like positive and negative sentiment. For example, it can assign a high score to a word like "excellent" in positive reviews and a low score to the same
+word in negative reviews. This helps identify words that strongly indicate the sentiment of a document, potentially leading to improved accuracy in text
+classification tasks. 

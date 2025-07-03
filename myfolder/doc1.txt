@@ -1,0 +1,15 @@
+The Arduino Uno is a series of open-source microcontroller board based on a diverse range of microcontrollers (MCU). It was initially developed and released by
+Arduino company in 2010. The microcontroller board is equipped with sets of digital and analog input/output (I/O) pins that may be interfaced to various
+expansion boards (shields) and other circuits. The board has 14 digital I/O pins (six capable of PWM output), 6 analog I/O pins, and is programmable with the
+Arduino IDE (Integrated Development Environment), via a type B USB cable. It can be powered by a USB cable or a barrel connector that accepts voltages between
+7 and 20 volts, such as a rectangular 9-volt battery. It has the same microcontroller as the Arduino Nano board, and the same headers as the Leonardo board.
+The hardware reference design is distributed under a Creative Commons Attribution Share-Alike 2.5 license and is available on the Arduino website. Layout and
+production files for some versions of the hardware are also available.
+
+The word "uno" means "one" in Italian and was chosen to mark a major redesign of the Arduino hardware and software. The Uno board was the successor of the
+Duemilanove release and was the 9th version in a series of USB-based Arduino boards. Version 1.0 of the Arduino IDE for the Arduino Uno board has now evolved
+to newer releases. The ATmega328 on the board comes preprogrammed with a bootloader that allows uploading new code to it without the use of an external
+hardware programmer.
+
+While the Uno communicates using the original STK500 protocol,[1] it differs from all preceding boards in that it does not use a FTDI USB-to-UART serial chip.
+Instead, it uses the Atmega16U2 (Atmega8U2 up to version R2) programmed as a USB-to-serial converter.

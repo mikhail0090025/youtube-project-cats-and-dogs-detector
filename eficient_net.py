@@ -10,9 +10,13 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 import matplotlib.pyplot as plt
 import os
-
+from torchvision.models import efficientnet_b0, efficientnet_b3
 # Глобальная история accuracy
 accuracy_history = {"train_acc": [], "val_acc": []}
+
+efficientnet = efficientnet_b3(pretrained=True).features
+for param in efficientnet.parameters():
+    param.requires_grad = False
 
 # Dataset
 class MyDataset(Dataset):
@@ -23,96 +27,56 @@ class MyDataset(Dataset):
             transforms.ToPILImage(),  # Преобразуем numpy в PIL
             transforms.Resize((100, 100)),
             transforms.ToTensor(),  # В [0, 1]
-            # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
         
         # Применяем трансформации с сохранением формы (C, H, W)
         for i in range(len(self.images)):
             # Обновляем исходные данные
-            print(self.images[i].shape)
             # self.images[i] = self.images[i].transpose((1, 2, 0))  # (3, 100, 100) -> (100, 100, 3)
             self.images[i] = (self.images[i] + 1) / 2  # Из [-1, 1] в [0, 1]
             transformed = self.transform(self.images[i].transpose((1, 2, 0)))  # (3, 100, 100) как тензор
             self.images[i] = transformed.numpy()  # Сохраняем как (3, 100, 100)
             print(f"Sample {i}: Min = {self.images[i].min():.4f}, Max = {self.images[i].max():.4f}")
         
+        if os.path.exists(f'efficientnet_b0_maps{len(self.images)}.npy'):
+            self.fms = np.load(f'efficientnet_b0_maps{len(self.images)}.npy')
+            self.fms = torch.from_numpy(np.array(self.fms)).float()
+        else:
+            self.fms = []
+            for i, image in enumerate(self.images):
+                self.fms.append(efficientnet(torch.tensor([image]))[-1])
+                if i % 100 == 0:
+                    print(f"Item {i}/{len(self.images)}")
+            
+            self.fms = torch.from_numpy(np.array(self.fms)).float()
+            np.save(f'efficientnet_b0_maps{len(self.images)}.npy', self.fms.numpy())
+        self.images = None
         print("Dataset size: ", self.__len__())
+        print("Dataset shape: ", self.fms.shape)
 
     def __len__(self):
-        return len(self.images)
+        return len(self.fms)
 
     def __getitem__(self, idx):
-        image = self.images[idx]
+        image = self.fms[idx]
         return image, self.outputs[idx]
 
 # Detector
 class Detector(nn.Module):
-    def __init__(self, bn: bool = True):
+    def __init__(self):
         super(Detector, self).__init__()
 
-        self.block1 = nn.Sequential(
-            nn.Conv2d(3, 8, 5, 2, 2),
-            nn.BatchNorm2d(8) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Conv2d(8, 8, 3, 1, 1),
-            nn.BatchNorm2d(8) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Dropout(0.1),
-        )
-
-        self.block2 = nn.Sequential(
-            nn.Conv2d(8, 16, 3, 2, 1),
-            nn.BatchNorm2d(16) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Conv2d(16, 16, 3, 1, 1),
-            nn.BatchNorm2d(16) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Dropout(0.1),
-        )
-
-        self.block3 = nn.Sequential(
-            nn.Conv2d(16, 32, 3, 2, 1),
-            nn.BatchNorm2d(32) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Conv2d(32, 32, 3, 1, 1),
-            nn.BatchNorm2d(32) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Dropout(0.1),
-        )
-
-        self.block4 = nn.Sequential(
-            nn.Conv2d(32, 64, 3, 2, 1),
-            nn.BatchNorm2d(64) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Conv2d(64, 64, 3, 1, 1),
-            nn.BatchNorm2d(64) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Dropout(0.1),
-        )
-
-        self.block5 = nn.Sequential(
-            nn.Conv2d(64, 128, 3, 2, 1),
-            nn.BatchNorm2d(128) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Conv2d(128, 128, 3, 1, 1),
-            nn.BatchNorm2d(128) if bn else nn.Identity(),
-            nn.PReLU(),
-            nn.Dropout(0.1),
-        )
-
-        self.last_part = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(4*4*128, 2),
-            nn.Softmax(dim=1)  # Указал dim=1 для корректной классификации
-        )
+        self.flatten = nn.Flatten()
+        self.linear2 = nn.Linear(4*4*1536, 2)
+        self.softmax = nn.Softmax()
 
     def forward(self, x):
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.block3(x)
-        x = self.block4(x)
-        x = self.block5(x)
-        x = self.last_part(x)
+        # 4x4x1280
+        # x = self.compression_layer(x)
+        x = self.flatten(x)
+        x = self.linear2(x)
+        x = self.softmax(x)
         return x
 
 def init_weights(m):
@@ -131,9 +95,10 @@ train_dataset = MyDataset(train_cats, train_dogs)
 val_dataset = MyDataset(val_cats, val_dogs)
 train_dataloader = DataLoader(train_dataset, batch_size=128, shuffle=True)
 val_dataloader = DataLoader(val_dataset, batch_size=128, shuffle=True)
-detector = Detector(bn=False).to(device)
+detector = Detector().to(device)
 detector.apply(init_weights)
 optimizer = optim.Adam(detector.parameters(), lr=0.0005, weight_decay=0.0001)
+optimizer2 = optim.SGD(detector.parameters(), lr=0.0005, momentum=0.9)
 criterion = nn.CrossEntropyLoss()
 
 # Методы для эпох
@@ -180,12 +145,14 @@ def test():
     from PIL import Image
     import dataset_manager as dm
     test_path = os.path.join("test", os.listdir("test")[0])
-    image = np.transpose(np.expand_dims(((np.array(Image.open(test_path).convert("RGB").resize(dm.image_size), dtype=np.float32) / 127.5) - 1), 0), (0, 3, 1, 2))
+    image = np.transpose(np.expand_dims((np.array(Image.open(test_path).convert("RGB").resize(dm.image_size), dtype=np.float32) / 255), 0), (0, 3, 1, 2))
     print(image.shape)
+    image = torch.tensor(image)
+    transformed = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(image)
+    image = transformed
     print(image.min())
     print(image.max())
-    image = torch.tensor(image)
-    prediction = detector(image)
+    prediction = detector(efficientnet(image))
     return prediction.detach().numpy()[0]
 # Сервер
 app = FastAPI()
@@ -228,15 +195,20 @@ async def change_learning_rate(coefficient: float):
         return JSONResponse(content={"error": "Coefficient must be positive"}, status_code=400)
 
     current_lr_adam = optimizer.param_groups[0]['lr']
+    current_lr_sgd = optimizer2.param_groups[0]['lr']
 
     new_lr_adam = current_lr_adam * coefficient
+    new_lr_sgd = current_lr_sgd * coefficient
 
     optimizer.param_groups[0]['lr'] = new_lr_adam
+    optimizer2.param_groups[0]['lr'] = new_lr_sgd
 
     return JSONResponse(content={
         "message": "Learning rate updated",
         "old_lr_adam": current_lr_adam,
-        "new_lr_adam": new_lr_adam
+        "new_lr_adam": new_lr_adam,
+        "old_lr_sgd": current_lr_sgd,
+        "new_lr_sgd": new_lr_sgd
     })
 
 # Запуск сервера
