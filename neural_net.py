@@ -135,6 +135,8 @@ detector = Detector(bn=False).to(device)
 detector.apply(init_weights)
 optimizer = optim.Adam(detector.parameters(), lr=0.0005, weight_decay=0.0001)
 criterion = nn.CrossEntropyLoss()
+total_params = sum(p.numel() for p in detector.parameters())
+trainable_params = sum(p.numel() for p in detector.parameters() if p.requires_grad)
 
 # Методы для эпох
 def epoch(model, optimizer, criterion, dataloader, is_train=True):
